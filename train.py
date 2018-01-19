@@ -82,6 +82,16 @@ def main():
     # Start multiprocessing
     trainer = MultiprocessingTrainer(args, model, criterion)
 
+    # Create files to save losses
+    traincsv_path = os.path.join(args.save_dir, 'train_losses.csv')
+    validcsv_path = os.path.join(args.save_dir, 'valid_losses.csv')
+    output_path = [traincsv_path, validcsv_path]
+    for path in output_path:
+        with open(path, 'w+') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow(['Epoch', 'Perplexity', 'Loss'])
+            csvfile.close()
+
     # Load the latest checkpoint if one is available
     checkpoint_path = os.path.join(args.save_dir, args.restore_file)
     extra_state = trainer.load_checkpoint(checkpoint_path)
@@ -199,7 +209,6 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions):
             for k, meter in extra_meters.items()
         ]))
 
-        traincsv_path = os.path.join(args.save_dir, 'train_losses.csv')
         # save training losses to csv
         with open (traincsv_path, 'ab') as csvfile:
             csvwriter = csv.writer(csvfile, delimiter=',')
@@ -268,8 +277,6 @@ def validate(args, epoch, trainer, dataset, max_positions, subset):
             (k, meter.avg)
             for k, meter in extra_meters.items()
         ]))
-
-        validcsv_path = os.path.join(args.save_dir, 'valid_losses.csv')
 
         # save validation losses to csv
         with open (validcsv_path, 'ab') as csvfile:

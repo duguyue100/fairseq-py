@@ -14,7 +14,7 @@ from .fairseq_model import FairseqModel
 from . import fconv, lstm
 
 
-__all__ = ['fconv', 'lstm']
+__all__ = ['fconv', 'lstm', 'gru']
 
 arch_model_map = {}
 for model in __all__:

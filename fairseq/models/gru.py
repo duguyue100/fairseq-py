@@ -254,6 +254,7 @@ def Linear(in_features, out_features, bias=True, dropout=0):
 def get_archs():
     return [
         'GRU', 'GRU_wiseman_iwslt_de_en', 'GRU_luong_wmt_en_de',
+        "GRU_en2wubi_model", "GRU_wubi2en_model",
     ]
 
 

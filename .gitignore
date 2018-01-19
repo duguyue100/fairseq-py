@@ -112,3 +112,4 @@ mosesdecoder/
 orig/
 subword-nmt/
 en2wb/
+data-bin/

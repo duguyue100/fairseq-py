@@ -111,3 +111,4 @@ iwslt14.tokenized.de-en/
 mosesdecoder/
 orig/
 subword-nmt/
+en2wb/

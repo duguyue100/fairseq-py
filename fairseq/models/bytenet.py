@@ -33,16 +33,18 @@ def make_positions(tokens, padding_idx, left_pad, offset=0):
     return tokens.clone().masked_scatter_(mask, positions[mask])
 
 
-class FConvModel(FairseqModel):
+class BytenetModel(FairseqModel):
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)
         self.encoder.num_attention_layers = sum(layer is not None for layer in decoder.attention)
 
 
-class FConvEncoder(FairseqEncoder):
+class BytenetEncoder(FairseqEncoder):
     """Convolutional encoder"""
     def __init__(self, dictionary, embed_dim=512, max_positions=1024,
-                 convolutions=((512, 3),) * 20, dropout=0.1):
+                 convolutions=((512, 3, 1, False, 5),) * 3, dropout=0.1):
+                 # convolutions = (in_channels, kernel_size, init_dilation,
+                 # causal, num_res_block)
         super().__init__()
         self.dictionary = dictionary
         self.dropout = dropout
@@ -55,7 +57,8 @@ class FConvEncoder(FairseqEncoder):
 
         in_channels = convolutions[0][0]
         self.fc1 = Linear(embed_dim, in_channels, dropout=dropout)
-        self.projections = nn.ModuleList()
+
+
         self.convolutions = nn.ModuleList()
         for (out_channels, kernel_size) in convolutions:
             pad = (kernel_size - 1) / 2
@@ -148,7 +151,7 @@ class AttentionLayer(nn.Module):
             self.bmm = BeamableMM(beamable_mm_beam_size)
 
 
-class FConvDecoder(FairseqIncrementalDecoder):
+class BytenetDecoder(FairseqIncrementalDecoder):
     """Convolutional decoder"""
     def __init__(self, dictionary, embed_dim=512, out_embed_dim=256,
                  max_positions=1024, convolutions=((512, 3),) * 20,
@@ -333,15 +336,15 @@ def ConvTBC(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
 
 def get_archs():
     return [
-        'fconv', 'fconv_iwslt_de_en', 'fconv_wmt_en_ro', 'fconv_wmt_en_de', 'fconv_wmt_en_fr',
+        'Bytenet', 'Bytenet_iwslt_de_en', 'Bytenet_wmt_en_ro', 'Bytenet_wmt_en_de', 'Bytenet_wmt_en_fr',
     ]
 
 
 def _check_arch(args):
     """Check that the specified architecture is valid and not ambiguous."""
     if args.arch not in get_archs():
-        raise ValueError('Unknown fconv model architecture: {}'.format(args.arch))
-    if args.arch != 'fconv':
+        raise ValueError('Unknown Bytenet model architecture: {}'.format(args.arch))
+    if args.arch != 'Bytenet':
         # check that architecture is not ambiguous
         for a in ['encoder_embed_dim', 'encoder_layers', 'decoder_embed_dim', 'decoder_layers',
                   'decoder_out_embed_dim']:
@@ -352,19 +355,19 @@ def _check_arch(args):
 def parse_arch(args):
     _check_arch(args)
 
-    if args.arch == 'fconv_iwslt_de_en':
+    if args.arch == 'Bytenet_iwslt_de_en':
         args.encoder_embed_dim = 256
         args.encoder_layers = '[(256, 3)] * 4'
         args.decoder_embed_dim = 256
         args.decoder_layers = '[(256, 3)] * 3'
         args.decoder_out_embed_dim = 256
-    elif args.arch == 'fconv_wmt_en_ro':
+    elif args.arch == 'Bytenet_wmt_en_ro':
         args.encoder_embed_dim = 512
         args.encoder_layers = '[(512, 3)] * 20'
         args.decoder_embed_dim = 512
         args.decoder_layers = '[(512, 3)] * 20'
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_wmt_en_de':
+    elif args.arch == 'Bytenet_wmt_en_de':
         convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
         convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
         convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
@@ -373,7 +376,7 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_wmt_en_fr':
+    elif args.arch == 'Bytenet_wmt_en_fr':
         convs = '[(512, 3)] * 6'       # first 6 layers have 512 units
         convs += ' + [(768, 3)] * 4'   # next 4 layers have 768 units
         convs += ' + [(1024, 3)] * 3'  # next 3 layers have 1024 units
@@ -385,7 +388,7 @@ def parse_arch(args):
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
     else:
-        assert args.arch == 'fconv'
+        assert args.arch == 'Bytenet'
 
     # default architecture
     args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
@@ -398,14 +401,14 @@ def parse_arch(args):
 
 
 def build_model(args, src_dict, dst_dict):
-    encoder = FConvEncoder(
+    encoder = BytenetEncoder(
         src_dict,
         embed_dim=args.encoder_embed_dim,
         convolutions=eval(args.encoder_layers),
         dropout=args.dropout,
         max_positions=args.max_source_positions,
     )
-    decoder = FConvDecoder(
+    decoder = BytenetDecoder(
         dst_dict,
         embed_dim=args.decoder_embed_dim,
         convolutions=eval(args.decoder_layers),
@@ -414,4 +417,4 @@ def build_model(args, src_dict, dst_dict):
         dropout=args.dropout,
         max_positions=args.max_target_positions,
     )
-    return FConvModel(encoder, decoder)
+    return BytenetModel(encoder, decoder)

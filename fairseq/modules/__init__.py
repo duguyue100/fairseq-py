@@ -10,10 +10,15 @@ from .beamable_mm import BeamableMM
 from .conv_tbc import ConvTBC
 from .grad_multiply import GradMultiply
 from .linearized_convolution import LinearizedConvolution
+from .bytenet_modules import DilatedConv1d, LayerNorm, ResBlock, EncoderDecoder
 
 __all__ = [
     'BeamableMM',
     'ConvTBC',
     'GradMultiply',
     'LinearizedConvolution',
+    "DilatedConv1d",
+    "LayerNorm",
+    "ResBlock",
+    "EncoderDecoder"
 ]

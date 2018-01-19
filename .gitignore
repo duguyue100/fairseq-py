@@ -105,3 +105,9 @@ ENV/
 
 # Generated files
 fairseq/temporal_convolution_tbc
+
+# ignore default folders
+iwslt14.tokenized.de-en/
+mosesdecoder/
+orig/
+subword-nmt/

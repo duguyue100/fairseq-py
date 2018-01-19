@@ -199,6 +199,14 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions):
             for k, meter in extra_meters.items()
         ]))
 
+        traincsv_path = os.path.join(args.save_dir, 'train_losses.csv')
+        # save training losses to csv
+        with open (traincsv_path, 'ab') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
+                                round(loss_meter.avg, 4)])
+            csvfile.close()
+
 
 def save_checkpoint(trainer, args, epoch, batch_offset, val_loss):
     extra_state = {
@@ -260,6 +268,15 @@ def validate(args, epoch, trainer, dataset, max_positions, subset):
             (k, meter.avg)
             for k, meter in extra_meters.items()
         ]))
+
+        validcsv_path = os.path.join(args.save_dir, 'valid_losses.csv')
+
+        # save validation losses to csv
+        with open (validcsv_path, 'ab') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
+                                round(loss_meter.avg, 4)])
+            csvfile.close()
 
     # update and return the learning rate
     return loss_meter.avg

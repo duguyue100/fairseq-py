@@ -13,7 +13,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from fairseq.data import LanguagePairDataset
-from fairseq.modules import BeamableMM, GradMultiply, LinearizedConvolution
+from fairseq.modules import BeamableMM
+from fairseq.modules import ResBlock
 
 from . import FairseqEncoder, FairseqIncrementalDecoder, FairseqModel
 
@@ -42,120 +43,124 @@ class BytenetModel(FairseqModel):
 class BytenetEncoder(FairseqEncoder):
     """Convolutional encoder"""
     def __init__(self, dictionary, embed_dim=512, max_positions=1024,
-                 convolutions=((512, 3, 1, False, 5),) * 3, dropout=0.1):
-                 # convolutions = (in_channels, kernel_size, init_dilation,
-                 # causal, num_res_block)
+                 convolutions=((512, 3, [1, 2, 4, 8, 16], False),) * 3,
+                 dropout=0.1):
+        # convolutions = (in_channels, kernel_size, init_dilation,
+        # causal, num_res_block)
         super().__init__()
         self.dictionary = dictionary
         self.dropout = dropout
-        self.num_attention_layers = None
 
+        # map token to embedding
         num_embeddings = len(dictionary)
         padding_idx = dictionary.pad()
         self.embed_tokens = Embedding(num_embeddings, embed_dim, padding_idx)
-        self.embed_positions = Embedding(max_positions, embed_dim, padding_idx)
+        #  self.embed_positions = Embedding(max_positions, embed_dim, padding_idx)
 
+        # map embedding dim to in_channels
         in_channels = convolutions[0][0]
         self.fc1 = Linear(embed_dim, in_channels, dropout=dropout)
 
-
+        # build up convolution layers
         self.convolutions = nn.ModuleList()
-        for (out_channels, kernel_size) in convolutions:
-            pad = (kernel_size - 1) / 2
-            self.projections.append(Linear(in_channels, out_channels)
-                                    if in_channels != out_channels else None)
-            self.convolutions.append(
-                ConvTBC(in_channels, out_channels * 2, kernel_size, padding=pad,
-                        dropout=dropout))
-            in_channels = out_channels
+        for sets in convolutions:
+            for dilation_rate in sets[2]:
+                self.convolutions.append(
+                    ResBlock(in_channels=sets[0],
+                             kernel_size=sets[1],
+                             dilation=dilation_rate,
+                             causal=sets[3]))
+
+        # remap from in channels to embedding size
         self.fc2 = Linear(in_channels, embed_dim)
 
-    def forward(self, src_tokens):
-        positions = Variable(make_positions(src_tokens.data, self.dictionary.pad(),
-                                            left_pad=LanguagePairDataset.LEFT_PAD_SOURCE))
+    def forward(self, src_tokens, tgt_tokens):
+        # TODO: do we really need this?
+        #  positions = Variable(make_positions(src_tokens.data, self.dictionary.pad(),
+        #                                      left_pad=LanguagePairDataset.LEFT_PAD_SOURCE))
 
         # embed tokens and positions
-        x = self.embed_tokens(src_tokens) + self.embed_positions(positions)
+        # TODO: why do I need positions?
+        #  x = self.embed_tokens(src_tokens) + self.embed_positions(positions)
+        x = self.embed_tokens(src_tokens)
         x = F.dropout(x, p=self.dropout, training=self.training)
-        input_embedding = x
+        input_embedding = self.embed_tokens(tgt_tokens)
 
         # project to size of convolution
         x = self.fc1(x)
 
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        # B x T x C -> B x C x T
+        x = x.transpose(1, 2)
 
         # temporal convolutions
-        for proj, conv in zip(self.projections, self.convolutions):
-            residual = x if proj is None else proj(x)
-            x = F.dropout(x, p=self.dropout, training=self.training)
+        for conv in self.convolutions:
             x = conv(x)
-            x = F.glu(x, dim=-1)
-            x = (x + residual) * math.sqrt(0.5)
 
-        # T x B x C -> B x T x C
-        x = x.transpose(1, 0)
+        # B x C x T -> B x T x C
+        x = x.transpose(2, 1)
 
         # project back to size of embedding
         x = self.fc2(x)
 
         # scale gradients (this only affects backward, not forward)
-        x = GradMultiply.apply(x, 1.0 / (2.0 * self.num_attention_layers))
+        #  x = GradMultiply.apply(x, 1.0 / (2.0 * self.num_attention_layers))
 
         # add output to input embedding for attention
-        y = (x + input_embedding) * math.sqrt(0.5)
+        y = x + input_embedding
 
         return x, y
 
     def max_positions(self):
         """Maximum input length supported by the encoder."""
+        # TODO: maybe I need to do something here
         return self.embed_positions.num_embeddings - self.dictionary.pad() - 1
 
 
-class AttentionLayer(nn.Module):
-    def __init__(self, conv_channels, embed_dim, bmm=None):
-        super().__init__()
-        # projects from output of convolution to embedding dimension
-        self.in_projection = Linear(conv_channels, embed_dim)
-        # projects from embedding dimension to convolution size
-        self.out_projection = Linear(embed_dim, conv_channels)
-
-        self.bmm = bmm if bmm is not None else torch.bmm
-
-    def forward(self, x, target_embedding, encoder_out):
-        residual = x
-
-        # attention
-        x = (self.in_projection(x) + target_embedding) * math.sqrt(0.5)
-        x = self.bmm(x, encoder_out[0])
-
-        # softmax over last dim
-        sz = x.size()
-        x = F.softmax(x.view(sz[0] * sz[1], sz[2]))
-        x = x.view(sz)
-        attn_scores = x
-
-        x = self.bmm(x, encoder_out[1])
-
-        # scale attention output
-        s = encoder_out[1].size(1)
-        x = x * (s * math.sqrt(1.0 / s))
-
-        # project back
-        x = (self.out_projection(x) + residual) * math.sqrt(0.5)
-        return x, attn_scores
-
-    def make_generation_fast_(self, beamable_mm_beam_size=None, **kwargs):
-        """Replace torch.bmm with BeamableMM."""
-        if beamable_mm_beam_size is not None:
-            self.bmm = BeamableMM(beamable_mm_beam_size)
+#  class AttentionLayer(nn.Module):
+#      def __init__(self, conv_channels, embed_dim, bmm=None):
+#          super().__init__()
+#          # projects from output of convolution to embedding dimension
+#          self.in_projection = Linear(conv_channels, embed_dim)
+#          # projects from embedding dimension to convolution size
+#          self.out_projection = Linear(embed_dim, conv_channels)
+#
+#          self.bmm = bmm if bmm is not None else torch.bmm
+#
+#      def forward(self, x, target_embedding, encoder_out):
+#          residual = x
+#
+#          # attention
+#          x = (self.in_projection(x) + target_embedding) * math.sqrt(0.5)
+#          x = self.bmm(x, encoder_out[0])
+#
+#          # softmax over last dim
+#          sz = x.size()
+#          x = F.softmax(x.view(sz[0] * sz[1], sz[2]))
+#          x = x.view(sz)
+#          attn_scores = x
+#
+#          x = self.bmm(x, encoder_out[1])
+#
+#          # scale attention output
+#          s = encoder_out[1].size(1)
+#          x = x * (s * math.sqrt(1.0 / s))
+#
+#          # project back
+#          x = (self.out_projection(x) + residual) * math.sqrt(0.5)
+#          return x, attn_scores
+#
+#      def make_generation_fast_(self, beamable_mm_beam_size=None, **kwargs):
+#          """Replace torch.bmm with BeamableMM."""
+#          if beamable_mm_beam_size is not None:
+#              self.bmm = BeamableMM(beamable_mm_beam_size)
 
 
 class BytenetDecoder(FairseqIncrementalDecoder):
     """Convolutional decoder"""
     def __init__(self, dictionary, embed_dim=512, out_embed_dim=256,
-                 max_positions=1024, convolutions=((512, 3),) * 20,
-                 attention=True, dropout=0.1):
+                 max_positions=1024,
+                 convolutions=((512, 3, [1, 2, 4, 8, 16], True),) * 3,
+                 attention=False, dropout=0.1):
         super().__init__()
         self.register_buffer('version', torch.Tensor([2]))
         self.dictionary = dictionary
@@ -169,22 +174,20 @@ class BytenetDecoder(FairseqIncrementalDecoder):
         num_embeddings = len(dictionary)
         padding_idx = dictionary.pad()
         self.embed_tokens = Embedding(num_embeddings, embed_dim, padding_idx)
-        self.embed_positions = Embedding(max_positions, embed_dim, padding_idx)
+        #  self.embed_positions = Embedding(max_positions, embed_dim, padding_idx)
 
         self.fc1 = Linear(embed_dim, in_channels, dropout=dropout)
-        self.projections = nn.ModuleList()
+
         self.convolutions = nn.ModuleList()
-        self.attention = nn.ModuleList()
-        for i, (out_channels, kernel_size) in enumerate(convolutions):
-            pad = kernel_size - 1
-            self.projections.append(Linear(in_channels, out_channels)
-                                    if in_channels != out_channels else None)
-            self.convolutions.append(
-                LinearizedConv1d(in_channels, out_channels * 2, kernel_size,
-                                 padding=pad, dropout=dropout))
-            self.attention.append(AttentionLayer(out_channels, embed_dim)
-                                  if attention[i] else None)
-            in_channels = out_channels
+
+        for sets in convolutions:
+            for dilation_rate in sets[2]:
+                self.convolutions.append(
+                    ResBlock(in_channels=sets[0],
+                             kernel_size=sets[1],
+                             dilation=dilation_rate,
+                             causal=sets[3]))
+
         self.fc2 = Linear(in_channels, out_embed_dim)
         self.fc3 = Linear(out_embed_dim, num_embeddings, dropout=dropout)
 
@@ -196,25 +199,25 @@ class BytenetDecoder(FairseqIncrementalDecoder):
 
     def batch_forward(self, input_tokens, encoder_out):
         """Forward pass for decoding multiple time steps in batch mode."""
-        positions = Variable(make_positions(input_tokens.data, self.dictionary.pad(),
-                                            left_pad=LanguagePairDataset.LEFT_PAD_TARGET))
-        return self._forward(input_tokens, positions, encoder_out)
+        #  positions = Variable(make_positions(input_tokens.data, self.dictionary.pad(),
+        #                                      left_pad=LanguagePairDataset.LEFT_PAD_TARGET))
+        return self._forward(input_tokens, encoder_out)
 
     def incremental_forward(self, input_tokens, encoder_out):
         """Forward pass for one time step."""
         # positions is the same for every token when decoding a single step
-        positions = Variable(input_tokens.data.new(1, 1).fill_(
-            self.dictionary.pad() + input_tokens.size(1)))
+        #  positions = Variable(input_tokens.data.new(1, 1).fill_(
+        #      self.dictionary.pad() + input_tokens.size(1)))
 
         # keep only the last token for incremental forward pass
-        return self._forward(input_tokens[:, -1:], positions, encoder_out)
+        return self._forward(input_tokens[:, -1:], encoder_out)
 
     def _forward(self, input_tokens, positions, encoder_out):
         # split and transpose encoder outputs
         encoder_a, encoder_b = self._split_encoder_out(encoder_out)
 
         # embed tokens and positions
-        x = self.embed_tokens(input_tokens) + self.embed_positions(positions)
+        x = self.embed_tokens(input_tokens)
         x = F.dropout(x, p=self.dropout, training=self.training)
         target_embedding = x
 
@@ -222,36 +225,17 @@ class BytenetDecoder(FairseqIncrementalDecoder):
         x = self.fc1(x)
 
         # B x T x C -> T x B x C
+        # TODO: do I need to transpose if not incremental eval?
         x = self._transpose_unless_incremental_eval(x)
 
         # temporal convolutions
-        avg_attn_scores = None
-        num_attn_layers = len(self.attention)
-        for proj, conv, attention in zip(self.projections, self.convolutions, self.attention):
-            residual = x if proj is None else proj(x)
-
-            x = F.dropout(x, p=self.dropout, training=self.training)
+        #  avg_attn_scores = None
+        #  num_attn_layers = len(self.attention)
+        for conv in self.convolutions:
             x = conv(x)
-            x = conv.remove_future_timesteps(x)
-            x = F.glu(x)
-
-            # attention
-            if attention is not None:
-                x = self._transpose_unless_incremental_eval(x)
-
-                x, attn_scores = attention(x, target_embedding, (encoder_a, encoder_b))
-                attn_scores = attn_scores / num_attn_layers
-                if avg_attn_scores is None:
-                    avg_attn_scores = attn_scores
-                else:
-                    avg_attn_scores.add_(attn_scores)
-
-                x = self._transpose_unless_incremental_eval(x)
-
-            # residual
-            x = (x + residual) * math.sqrt(0.5)
 
         # T x B x C -> B x T x C
+        # TODO: do I need to transpose if not incremental eval?
         x = self._transpose_unless_incremental_eval(x)
 
         # project back to size of vocabulary
@@ -259,7 +243,7 @@ class BytenetDecoder(FairseqIncrementalDecoder):
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.fc3(x)
 
-        return x, avg_attn_scores
+        return x
 
     def reorder_incremental_state(self, new_order):
         """Reorder buffered internal state (for incremental generation)."""
@@ -267,9 +251,11 @@ class BytenetDecoder(FairseqIncrementalDecoder):
 
     def max_positions(self):
         """Maximum output length supported by the decoder."""
+        # TODO: maybe I need to do something here
         return self.embed_positions.num_embeddings - self.dictionary.pad() - 1
 
     def upgrade_state_dict(self, state_dict):
+        # TODO: Can I remove this?
         if state_dict.get('decoder.version', torch.Tensor([1]))[0] < 2:
             # old models use incorrect weight norm dimension
             for i, conv in enumerate(self.convolutions):
@@ -298,7 +284,7 @@ class BytenetDecoder(FairseqIncrementalDecoder):
     def _transpose_unless_incremental_eval(self, x):
         if self._is_incremental_eval:
             return x
-        return x.transpose(0, 1)
+        return x.transpose(1, 2)
 
 
 def Embedding(num_embeddings, embedding_dim, padding_idx):
@@ -315,28 +301,9 @@ def Linear(in_features, out_features, dropout=0):
     return nn.utils.weight_norm(m)
 
 
-def LinearizedConv1d(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
-    """Weight-normalized Conv1d layer optimized for decoding"""
-    m = LinearizedConvolution(in_channels, out_channels, kernel_size, **kwargs)
-    std = math.sqrt((4 * (1.0 - dropout)) / (m.kernel_size[0] * in_channels))
-    m.weight.data.normal_(mean=0, std=std)
-    m.bias.data.zero_()
-    return nn.utils.weight_norm(m, dim=2)
-
-
-def ConvTBC(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
-    """Weight-normalized Conv1d layer"""
-    from fairseq.modules import ConvTBC
-    m = ConvTBC(in_channels, out_channels, kernel_size, **kwargs)
-    std = math.sqrt((4 * (1.0 - dropout)) / (m.kernel_size[0] * in_channels))
-    m.weight.data.normal_(mean=0, std=std)
-    m.bias.data.zero_()
-    return nn.utils.weight_norm(m, dim=2)
-
-
 def get_archs():
     return [
-        'Bytenet', 'Bytenet_iwslt_de_en', 'Bytenet_wmt_en_ro', 'Bytenet_wmt_en_de', 'Bytenet_wmt_en_fr',
+        'Bytenet', 'Bytenet_en2wubi', 'Bytenet_wubi2en',
     ]
 
 
@@ -355,37 +322,23 @@ def _check_arch(args):
 def parse_arch(args):
     _check_arch(args)
 
-    if args.arch == 'Bytenet_iwslt_de_en':
-        args.encoder_embed_dim = 256
-        args.encoder_layers = '[(256, 3)] * 4'
-        args.decoder_embed_dim = 256
-        args.decoder_layers = '[(256, 3)] * 3'
-        args.decoder_out_embed_dim = 256
-    elif args.arch == 'Bytenet_wmt_en_ro':
-        args.encoder_embed_dim = 512
-        args.encoder_layers = '[(512, 3)] * 20'
-        args.decoder_embed_dim = 512
-        args.decoder_layers = '[(512, 3)] * 20'
-        args.decoder_out_embed_dim = 512
-    elif args.arch == 'Bytenet_wmt_en_de':
-        convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
-        convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
-        convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
+    if args.arch == 'Bytenet_en2wubi':
+        en_convs = '((512, 3, [1, 2, 4, 8, 16], False),) * 3'
+        de_convs = '((1024, 3, [1, 2, 4, 8, 16], True),) * 3'
+        # TODO: make encoder conv and decoder conv different
         args.encoder_embed_dim = 768
-        args.encoder_layers = convs
+        args.encoder_layers = en_convs
         args.decoder_embed_dim = 768
-        args.decoder_layers = convs
+        args.decoder_layers = de_convs
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'Bytenet_wmt_en_fr':
-        convs = '[(512, 3)] * 6'       # first 6 layers have 512 units
-        convs += ' + [(768, 3)] * 4'   # next 4 layers have 768 units
-        convs += ' + [(1024, 3)] * 3'  # next 3 layers have 1024 units
-        convs += ' + [(2048, 1)] * 1'  # next 1 layer uses 1x1 convolutions
-        convs += ' + [(4096, 1)] * 1'  # final 1 layer uses 1x1 convolutions
+    elif args.arch == 'Bytenet_wubi2en':
+        en_convs = '((512, 3, [1, 2, 4, 8, 16], False),) * 3'
+        de_convs = '((1024, 3, [1, 2, 4, 8, 16], True),) * 3'
+        # TODO: make encoder conv and decoder conv different
         args.encoder_embed_dim = 768
-        args.encoder_layers = convs
+        args.encoder_layers = en_convs
         args.decoder_embed_dim = 768
-        args.decoder_layers = convs
+        args.decoder_layers = de_convs
         args.decoder_out_embed_dim = 512
     else:
         assert args.arch == 'Bytenet'

@@ -185,7 +185,7 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions):
             if args.save_interval > 0 and (i + 1) % args.save_interval == 0:
                 save_checkpoint(trainer, args, epoch, i + 1)
 
-        t.print(collections.OrderedDict([
+        t.log(collections.OrderedDict([
             ('train loss', round(loss_meter.avg, 2)),
             ('train ppl', get_perplexity(loss_meter.avg)),
             ('s/checkpoint', round(wps_meter.elapsed_time)),
@@ -253,7 +253,7 @@ def validate(args, epoch, trainer, dataset, max_positions, subset):
                 ('valid loss', round(loss_meter.avg, 2)),
             ] + extra_postfix))
 
-        t.print(collections.OrderedDict([
+        t.log(collections.OrderedDict([
             ('valid loss', round(loss_meter.avg, 2)),
             ('valid ppl', get_perplexity(loss_meter.avg)),
         ] + [

@@ -11,6 +11,7 @@ import collections
 import os
 import torch
 import math
+import csv
 
 from fairseq import data, options, utils
 from fairseq.meters import AverageMeter, StopwatchMeter, TimeMeter
@@ -81,6 +82,16 @@ def main():
 
     # Start multiprocessing
     trainer = MultiprocessingTrainer(args, model, criterion)
+
+    # Create files to save losses
+    traincsv_path = os.path.join(args.save_dir, 'train_losses.csv')
+    validcsv_path = os.path.join(args.save_dir, 'valid_losses.csv')
+    output_path = [traincsv_path, validcsv_path]
+    for path in output_path:
+        with open(path, 'w+') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow(['Epoch', 'Perplexity', 'Loss'])
+            csvfile.close()
 
     # Load the latest checkpoint if one is available
     checkpoint_path = os.path.join(args.save_dir, args.restore_file)
@@ -199,6 +210,13 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions):
             for k, meter in extra_meters.items()
         ]))
 
+        # save training losses to csv
+        with open (traincsv_path, 'ab') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
+                                round(loss_meter.avg, 4)])
+            csvfile.close()
+
 
 def save_checkpoint(trainer, args, epoch, batch_offset, val_loss):
     extra_state = {
@@ -260,6 +278,13 @@ def validate(args, epoch, trainer, dataset, max_positions, subset):
             (k, meter.avg)
             for k, meter in extra_meters.items()
         ]))
+
+        # save validation losses to csv
+        with open (validcsv_path, 'ab') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
+                                round(loss_meter.avg, 4)])
+            csvfile.close()
 
     # update and return the learning rate
     return loss_meter.avg

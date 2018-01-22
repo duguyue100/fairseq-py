@@ -333,7 +333,7 @@ def ConvTBC(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
 
 def get_archs():
     return [
-        'fconv', 'fconv_iwslt_de_en', 'fconv_wmt_en_ro', 'fconv_wmt_en_de', 'fconv_wmt_en_fr',
+        'fconv', 'fconv_iwslt_de_en', 'fconv_wmt_en_ro', 'fconv_wmt_en_de', 'fconv_wmt_en_fr', 'fconv_wubi2en', 'fconv_en2wubi'
     ]
 
 
@@ -384,6 +384,25 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
+    elif args.arch == 'fconv_en2wubi':
+        convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
+        convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
+        convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
+        args.encoder_embed_dim = 768
+        args.encoder_layers = convs
+        args.decoder_embed_dim = 768
+        args.decoder_layers = convs
+        args.decoder_out_embed_dim = 512
+    elif args.arch == 'fconv_wubi2en':
+        convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
+        convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
+        convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
+        args.encoder_embed_dim = 768
+        args.encoder_layers = convs
+        args.decoder_embed_dim = 768
+        args.decoder_layers = convs
+        args.decoder_out_embed_dim = 512
+
     else:
         assert args.arch == 'fconv'
 

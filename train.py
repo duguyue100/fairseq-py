@@ -210,9 +210,6 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions):
             for k, meter in extra_meters.items()
         ]))
 
-        print('loss', round(loss_meter.avg, 4))
-        print(type(round(loss_meter.avg, 4)))
-
         # save training losses to csv
         traincsv_path = os.path.join(args.save_dir, 'train_losses.csv')
         with open(traincsv_path, 'a+') as csvfile:

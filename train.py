@@ -210,13 +210,15 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions):
             for k, meter in extra_meters.items()
         ]))
 
+        print('loss', round(loss_meter.avg, 4))
+        print(type(round(loss_meter.avg, 4)))
+
         # save training losses to csv
-        with open (traincsv_path, 'ab') as csvfile:
+        traincsv_path = os.path.join(args.save_dir, 'train_losses.csv')
+        with open(traincsv_path, 'a+') as csvfile:
             csvwriter = csv.writer(csvfile, delimiter=',')
             csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
-                                round(loss_meter.avg, 4)])
-            csvfile.close()
-
+                                (round(loss_meter.avg, 4))])
 
 def save_checkpoint(trainer, args, epoch, batch_offset, val_loss):
     extra_state = {
@@ -271,7 +273,7 @@ def validate(args, epoch, trainer, dataset, max_positions, subset):
                 ('valid loss', round(loss_meter.avg, 2)),
             ] + extra_postfix))
 
-        t.log(collections.OrderedDict([
+        t.print(collections.OrderedDict([
             ('valid loss', round(loss_meter.avg, 2)),
             ('valid ppl', get_perplexity(loss_meter.avg)),
         ] + [
@@ -279,12 +281,13 @@ def validate(args, epoch, trainer, dataset, max_positions, subset):
             for k, meter in extra_meters.items()
         ]))
 
-        # save validation losses to csv
-        with open (validcsv_path, 'ab') as csvfile:
+        #save validation losses to csv
+        validcsv_path = os.path.join(args.save_dir, 'valid_losses.csv')
+        with open(validcsv_path, 'a+') as csvfile:
             csvwriter = csv.writer(csvfile, delimiter=',')
-            csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
+            csvwriter.writerow([epoch,
+                                round(get_perplexity(loss_meter.avg), 3),
                                 round(loss_meter.avg, 4)])
-            csvfile.close()
 
     # update and return the learning rate
     return loss_meter.avg

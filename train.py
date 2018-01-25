@@ -11,6 +11,7 @@ import collections
 import os
 import torch
 import math
+import csv
 
 from fairseq import data, options, utils
 from fairseq.meters import AverageMeter, StopwatchMeter, TimeMeter

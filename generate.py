@@ -94,6 +94,11 @@ def main():
                 print('S-{}\t{}'.format(sample_id, src_str))
                 print('T-{}\t{}'.format(sample_id, target_str))
 
+                with open(output_path, "a+") as f:
+                    f.write('SOURCE SENT %d: %s\n' % (sample_id, src_str))
+                    f.write('TARGET SENT %d: %s\n' % (sample_id, target_str))
+                    f.close()
+
             # Process top predictions
             for i, hypo in enumerate(hypos[:min(len(hypos), args.nbest)]):
                 hypo_tokens, hypo_str, alignment = utils.post_process_prediction(
@@ -107,6 +112,12 @@ def main():
                 if not args.quiet:
                     print('H-{}\t{}\t{}'.format(sample_id, hypo['score'], hypo_str))
                     print('A-{}\t{}'.format(sample_id, ' '.join(map(str, alignment))))
+
+                    with open(output_path, "a+") as f:
+                        f.write('PRED SENT %d: %s\n' % (sample_id, hypo_str))
+                        f.write('ALIGNMENT %d: %s\n' % (sample_id, alignment))
+                        f.write('\n*************** \n\n')
+                        f.close()
 
                 # Score only the top hypothesis
                 if i == 0:

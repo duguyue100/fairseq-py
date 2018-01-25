@@ -54,7 +54,7 @@ class build_py_hook(build_py):
 
 setup(
     name='fairseq',
-    version='0.2.1',
+    version='0.3.1',
     description='Facebook AI Research Sequence-to-Sequence Toolkit',
     long_description=readme,
     license=license,

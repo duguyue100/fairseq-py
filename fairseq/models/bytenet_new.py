@@ -9,7 +9,7 @@
 
 import math
 import torch
-#  from torch.autograd import Variable
+from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -333,9 +333,9 @@ def parse_arch(args):
 
     if args.arch == 'BN_iwslt_de_en':
         args.encoder_embed_dim = 256
-        args.encoder_layers = '(([1, 2, 4, 8, 16], 512, 3, False),)*3'
+        args.encoder_layers = '(([1, 2, 4, 8, 16], 256, 3, False),)*3'
         args.decoder_embed_dim = 256
-        args.decoder_layers = '(([1, 2, 4, 8, 16], 512, 3, True),)*3'
+        args.decoder_layers = '(([1, 2, 4, 8, 16], 256, 3, True),)*3'
         args.decoder_out_embed_dim = 256
     elif args.arch == 'BN_wubi2en':
         args.encoder_embed_dim = 512
@@ -350,7 +350,7 @@ def parse_arch(args):
         args.decoder_layers = '(([1, 2, 4, 8, 16], 512, 3, True),)*3'
         args.decoder_out_embed_dim = 512
     else:
-        assert args.arch == 'fconv'
+        assert args.arch == 'BN'
 
     # default architecture
     args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)

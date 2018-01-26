@@ -94,7 +94,8 @@ def main():
                 print('S-{}\t{}'.format(sample_id, src_str))
                 print('T-{}\t{}'.format(sample_id, target_str))
 
-            output_path = os.path.join(args.path, 'predictions.txt')
+
+            output_path = args.output_path
             with open(output_path, "a+") as f:
                     f.write('SOURCE SENT %d: %s\n' % (sample_id, src_str))
                     f.write('TARGET SENT %d: %s\n' % (sample_id, target_str))

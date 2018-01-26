@@ -216,7 +216,7 @@ class BNDecoder(FairseqIncrementalDecoder):
         # temporal convolutions
         avg_attn_scores = None
         num_attn_layers = len(self.attention)
-        for resblock, attention in (self.resblocks, self.attention):
+        for resblock, attention in zip(self.resblocks, self.attention):
             residual = x
             x = resblock(x)
 

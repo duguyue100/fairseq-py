@@ -94,7 +94,7 @@ class ResBlock(nn.Module):
     '''Redidual block.
     '''
     def __init__(self, in_channels, d_channels=None, out_channels=None,
-                 kernel_size=3, dilation=1, causal=True):
+                 kernel_size=3, dilation=1, causal=True, mode="encoder"):
         """The ResNet block.
 
         Parameters
@@ -109,6 +109,7 @@ class ResBlock(nn.Module):
         super(ResBlock, self).__init__()
         out_channels = out_channels or in_channels
         d_channels = d_channels or in_channels // 2
+        self.mode = mode
 
         # layer normalization layer
         self.layernorm1 = LayerNorm(num_features=in_channels)
@@ -136,13 +137,14 @@ class ResBlock(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, inputs):
-        out = self.layernorm1(inputs)
+        out = self.layernorm1(inputs.contiguous())
         out = self.conv_in(self.relu(out))
         out = self.layernorm2(out)
         out = self.conv_mid(self.relu(out))
         out = self.layernorm3(out)
         out = self.conv_out(self.relu(out))
-        out += inputs
+        if self.mode == "encoder":
+            out += inputs
         return out
 
 

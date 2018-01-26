@@ -17,6 +17,7 @@ from fairseq.data import LanguagePairDataset
 from fairseq.modules import BeamableMM
 from fairseq.modules import LearnedPositionalEmbedding
 from fairseq.modules import ResBlock
+from fairseq.modules import GradMultiply, LinearizedConvolution
 
 from . import FairseqEncoder, FairseqIncrementalDecoder, FairseqModel
 
@@ -29,17 +30,15 @@ class BNModel(FairseqModel):
 
 
 class BNEncoder(FairseqEncoder):
-    """ByteNet Convolutional encoder"""
+    """Convolutional encoder"""
     def __init__(self, dictionary, embed_dim=512, max_positions=1024,
-                 convolutions=(([1, 2, 4, 8, 16], 512, 3, False),)*3,
-                 dropout=0.1):
+                 convolutions=((512, 3),) * 20, dropout=0.1):
         super().__init__(dictionary)
         self.dropout = dropout
         self.num_attention_layers = None
 
         num_embeddings = len(dictionary)
         padding_idx = dictionary.pad()
-        # positioning embedding is fine here, just take it as embedding
         self.embed_tokens = Embedding(num_embeddings, embed_dim, padding_idx)
         self.embed_positions = PositionalEmbedding(
             max_positions, embed_dim, padding_idx,
@@ -48,19 +47,17 @@ class BNEncoder(FairseqEncoder):
         in_channels = convolutions[0][1]
         self.fc1 = Linear(embed_dim, in_channels, dropout=dropout)
 
-        # Remember, this is processing via B x C x T
         self.resblocks = nn.ModuleList()
         for en_set in convolutions:
             # for each set
             (dil_rates, num_channels, kernel_size, causal) = en_set
             for dil_rate in dil_rates:
                 self.resblocks.append(
-                    ResBlock(in_channels=in_channels,
+                    ResBlock(in_channels=num_channels,
                              kernel_size=kernel_size,
                              dilation=dil_rate,
                              causal=causal))
 
-        # this is fine as well
         self.fc2 = Linear(in_channels, embed_dim)
 
     def forward(self, src_tokens):
@@ -83,16 +80,12 @@ class BNEncoder(FairseqEncoder):
         x = x.transpose(1, 2)
 
         # project back to size of embedding
-        # TODO: assess if we need this or not
         x = self.fc2(x)
 
         # scale gradients (this only affects backward, not forward)
-        # we might not need this
         #  x = GradMultiply.apply(x, 1.0 / (2.0 * self.num_attention_layers))
 
         # add output to input embedding for attention
-        # we might not need the math.sqrt part
-        # we might not even need this y
         y = (x + input_embedding) * math.sqrt(0.5)
 
         return x, y
@@ -143,21 +136,26 @@ class AttentionLayer(nn.Module):
 
 
 class BNDecoder(FairseqIncrementalDecoder):
-    """ByteNet Convolutional decoder"""
+    """Convolutional decoder"""
     def __init__(self, dictionary, embed_dim=512, out_embed_dim=256,
-                 max_positions=1024,
-                 convolutions=(([1, 2, 4, 8, 16], 512, 3, True),)*3,
-                 attention=True,
-                 dropout=0.1, share_embed=False):
+                 max_positions=1024, convolutions=((512, 3),) * 20,
+                 attention=True, dropout=0.1, share_embed=False):
         super().__init__(dictionary)
         self.register_buffer('version', torch.Tensor([2]))
         self.dropout = dropout
 
         in_channels = convolutions[0][1]
+        if isinstance(attention, bool):
+            # expand True into [True, True, ...] and do the same with False
+            attention = [attention] * len(convolutions[0][0])
+        if not isinstance(attention, list) or \
+                len(attention) != len(convolutions[0][0]):
+            raise ValueError(
+                'Attention is expected to be a list of booleans of '
+                'length equal to the number of layers.')
 
         num_embeddings = len(dictionary)
         padding_idx = dictionary.pad()
-        # we can use the embedding
         self.embed_tokens = Embedding(num_embeddings, embed_dim, padding_idx)
         self.embed_positions = PositionalEmbedding(
             max_positions, embed_dim, padding_idx,
@@ -165,24 +163,23 @@ class BNDecoder(FairseqIncrementalDecoder):
 
         self.fc1 = Linear(embed_dim, in_channels, dropout=dropout)
 
-        # Remember, this is processing via B x C x T
         self.resblocks = nn.ModuleList()
         self.attention = nn.ModuleList()
         for en_set in convolutions:
             # for each set
             (dil_rates, num_channels, kernel_size, causal) = en_set
             # define residual layer
-            for dil_rate in dil_rates:
+            for i, dil_rate in enumerate(dil_rates):
                 self.resblocks.append(
-                    ResBlock(in_channels=in_channels,
+                    ResBlock(in_channels=num_channels,
                              kernel_size=kernel_size,
                              dilation=dil_rate,
-                             causal=causal))
-                if attention is True:
-                    self.attention.append(
-                        AttentionLayer(in_channels, embed_dim))
+                             causal=causal,
+                             mode="decoder"))
+                self.attention.append(
+                    AttentionLayer(num_channels, embed_dim)
+                    if attention[i] else None)
 
-        # leave the FC2
         self.fc2 = Linear(in_channels, out_embed_dim)
         if share_embed:
             assert out_embed_dim == embed_dim, \
@@ -206,7 +203,7 @@ class BNDecoder(FairseqIncrementalDecoder):
             input_tokens = input_tokens[:, -1:]
 
         # embed tokens and positions
-        x = self.embed_tokens(input_tokens) + positions + encoder_a
+        x = self.embed_tokens(input_tokens) + positions
         x = F.dropout(x, p=self.dropout, training=self.training)
         target_embedding = x
 
@@ -219,20 +216,24 @@ class BNDecoder(FairseqIncrementalDecoder):
         # temporal convolutions
         avg_attn_scores = None
         num_attn_layers = len(self.attention)
-        for resblock, attention in zip(self.resblocks, self.attention):
+        for resblock, attention in (self.resblocks, self.attention):
+            residual = x
             x = resblock(x)
 
-            x = self._transpose_unless_incremental_eval(x)
+            if attention is not None:
+                x = self._transpose_unless_incremental_eval(x)
 
-            x, attn_scores = attention(
-                x, target_embedding, (encoder_a, encoder_b))
-            attn_scores = attn_scores / num_attn_layers
-            if avg_attn_scores is None:
-                avg_attn_scores = attn_scores
-            else:
-                avg_attn_scores.add_(attn_scores)
+                x, attn_scores = attention(
+                    x, target_embedding, (encoder_a, encoder_b))
+                attn_scores = attn_scores / num_attn_layers
+                if avg_attn_scores is None:
+                    avg_attn_scores = attn_scores
+                else:
+                    avg_attn_scores.add_(attn_scores)
 
-            x = self._transpose_unless_incremental_eval(x)
+                x = self._transpose_unless_incremental_eval(x)
+
+            x = x+residual
 
         # B x C x T -> B x T x C
         x = self._transpose_unless_incremental_eval(x)
@@ -241,6 +242,7 @@ class BNDecoder(FairseqIncrementalDecoder):
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.fc3(x)
+        print (x.size())
 
         return x, avg_attn_scores
 
@@ -333,10 +335,11 @@ def parse_arch(args):
 
     if args.arch == 'BN_iwslt_de_en':
         args.encoder_embed_dim = 256
-        args.encoder_layers = '(([1, 2, 4, 8, 16], 256, 3, False),)*3'
+        args.encoder_layers = '(([1, 2, 4, 8, 16], 200, 3, False),)*3'
         args.decoder_embed_dim = 256
-        args.decoder_layers = '(([1, 2, 4, 8, 16], 256, 3, True),)*3'
+        args.decoder_layers = '(([1, 2, 4, 8, 16], 200, 3, True),)*3'
         args.decoder_out_embed_dim = 256
+        #  args.decoder_out_embed_dim = 256
     elif args.arch == 'BN_wubi2en':
         args.encoder_embed_dim = 512
         args.encoder_layers = '(([1, 2, 4, 8, 16], 512, 3, False),)*3'

@@ -281,7 +281,7 @@ class MultiprocessingTrainer(MultiprocessingEventLoop):
 
     def _all_reduce_and_rescale_grads(self, grad_denom, buffer_size=10485760):
         """All-reduce and rescale gradients in chunks of the specified size."""
-        grads = [p.grad.data for p in self.model.parameters() if p.requires_grad]
+        grads = [p.grad.data for p in self.model.parameters() if p.requires_grad and p.grad is not None]
         buffer_t = grads[0].new(math.ceil(buffer_size / grads[0].element_size())).zero_()
         buffer = []
 

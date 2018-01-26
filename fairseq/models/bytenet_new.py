@@ -25,8 +25,8 @@ from . import FairseqEncoder, FairseqIncrementalDecoder, FairseqModel
 class BNModel(FairseqModel):
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)
-        self.encoder.num_attention_layers = sum(
-            layer is not None for layer in decoder.attention)
+        #  self.encoder.num_attention_layers = sum(
+        #      layer is not None for layer in decoder.attention)
 
 
 class BNEncoder(FairseqEncoder):
@@ -147,7 +147,7 @@ class BNDecoder(FairseqIncrementalDecoder):
         in_channels = convolutions[0][1]
         if isinstance(attention, bool):
             # expand True into [True, True, ...] and do the same with False
-            attention = [attention] * len(convolutions[0][0])
+            attention = [False] * len(convolutions[0][0])
         if not isinstance(attention, list) or \
                 len(attention) != len(convolutions[0][0]):
             raise ValueError(
@@ -242,7 +242,6 @@ class BNDecoder(FairseqIncrementalDecoder):
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.fc3(x)
-        print (x.size())
 
         return x, avg_attn_scores
 
@@ -316,7 +315,7 @@ def get_archs():
 def _check_arch(args):
     """Check that the specified architecture is valid and not ambiguous."""
     if args.arch not in get_archs():
-        raise ValueError('Unknown fconv model architecture: {}'.format(
+        raise ValueError('Unknown BN model architecture: {}'.format(
             args.arch))
     if args.arch != 'BN':
         # check that architecture is not ambiguous

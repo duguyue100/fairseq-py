@@ -119,11 +119,11 @@ def main():
     train_meter.start()
     while lr > args.min_lr and epoch <= max_epoch:
         # train for one epoch
-        train(args, epoch, batch_offset, trainer, dataset, max_positions_train)
+        train(args, epoch, batch_offset, trainer, dataset, max_positions_train, traincsv_path)
 
         # evaluate on validate set
         for k, subset in enumerate(args.valid_subset.split(',')):
-            val_loss = validate(args, epoch, trainer, dataset, max_positions_valid, subset)
+            val_loss = validate(args, epoch, trainer, dataset, max_positions_valid, subset, validcsv_path)
             if k == 0:
                 if not args.no_save:
                     # save checkpoint
@@ -147,7 +147,7 @@ def get_perplexity(loss):
         return float('inf')
 
 
-def train(args, epoch, batch_offset, trainer, dataset, max_positions):
+def train(args, epoch, batch_offset, trainer, dataset, max_positions, traincsv_path):
     """Train the model for one epoch."""
 
     seed = args.seed + epoch
@@ -224,12 +224,12 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions):
             for k, meter in extra_meters.items()
         ]))
 
-        # save training losses to csv
-        with open (traincsv_path, 'ab') as csvfile:
-            csvwriter = csv.writer(csvfile, delimiter=',')
-            csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
-                                round(loss_meter.avg, 4)])
-            csvfile.close()
+        #  save training losses to csv
+        #  with open (traincsv_path, 'ab') as csvfile:
+        #      csvwriter = csv.writer(csvfile, delimiter=',')
+        #      csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
+        #                          round(loss_meter.avg, 4)])
+        #      csvfile.close()
 
 
 def save_checkpoint(trainer, args, epoch, batch_offset, val_loss):
@@ -258,7 +258,7 @@ def save_checkpoint(trainer, args, epoch, batch_offset, val_loss):
     trainer.save_checkpoint(last_filename, extra_state)
 
 
-def validate(args, epoch, trainer, dataset, max_positions, subset):
+def validate(args, epoch, trainer, dataset, max_positions, subset, validcsv_path):
     """Evaluate the model on the validation set and return the average loss."""
 
     itr = dataset.eval_dataloader(
@@ -305,11 +305,11 @@ def validate(args, epoch, trainer, dataset, max_positions, subset):
         ]))
 
         # save validation losses to csv
-        with open (validcsv_path, 'ab') as csvfile:
-            csvwriter = csv.writer(csvfile, delimiter=',')
-            csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
-                                round(loss_meter.avg, 4)])
-            csvfile.close()
+        #  with open (validcsv_path, 'ab') as csvfile:
+        #      csvwriter = csv.writer(csvfile, delimiter=',')
+        #      csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
+        #                          round(loss_meter.avg, 4)])
+        #      csvfile.close()
 
     # update and return the learning rate
     return loss_meter.avg

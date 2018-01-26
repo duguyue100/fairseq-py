@@ -101,7 +101,6 @@ def main():
             with open(output_path, "a+") as f:
                     f.write('SOURCE SENT %d: %s\n' % (sample_id, src_str))
                     f.write('TARGET SENT %d: %s\n' % (sample_id, target_str))
-                    f.close()
 
             # Process top predictions
             for i, hypo in enumerate(hypos[:min(len(hypos), args.nbest)]):
@@ -121,8 +120,6 @@ def main():
                         f.write('PRED SENT %d: %s\n' % (sample_id, hypo_str))
                         f.write('ALIGNMENT %d: %s\n' % (sample_id, ' '.join(map(str, alignment))))
                         f.write('\n*************** \n\n')
-                        f.close()
-
 
                 # Score only the top hypothesis
                 if i == 0:
@@ -140,6 +137,11 @@ def main():
     print('| Translated {} sentences ({} tokens) in {:.1f}s ({:.2f} tokens/s)'.format(
         num_sentences, gen_timer.n, gen_timer.sum, 1. / gen_timer.avg))
     print('| Generate {} with beam={}: {}'.format(args.gen_subset, args.beam, scorer.result_string()))
+
+    with open(output_path, "a+") as f:
+        f.write('| Translated {} sentences ({} tokens) in {:.1f}s ({:.2f} tokens/s)'.format(
+        num_sentences, gen_timer.n, gen_timer.sum, 1. / gen_timer.avg))
+	f.write('| Generate {} with beam={}: {}'.format(args.gen_subset, args.beam, scorer.result_string()))
 
 
 if __name__ == '__main__':

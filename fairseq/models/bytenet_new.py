@@ -24,8 +24,8 @@ from . import FairseqEncoder, FairseqIncrementalDecoder, FairseqModel
 class BNModel(FairseqModel):
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)
-        #  self.encoder.num_attention_layers = sum(
-        #      layer is not None for layer in decoder.attention)
+        self.encoder.num_attention_layers = sum(
+            layer is not None for layer in decoder.attention)
 
 
 class BNEncoder(FairseqEncoder):
@@ -255,10 +255,10 @@ class BNDecoder(FairseqIncrementalDecoder):
     def upgrade_state_dict(self, state_dict):
         if state_dict.get('decoder.version', torch.Tensor([1]))[0] < 2:
             # old models use incorrect weight norm dimension
-            for i, conv in enumerate(self.convolutions):
+            for i, conv in enumerate(self.resblocks):
                 # reconfigure weight norm
                 nn.utils.remove_weight_norm(conv)
-                self.convolutions[i] = nn.utils.weight_norm(conv, dim=0)
+                self.resblocks[i] = nn.utils.weight_norm(conv, dim=0)
             state_dict['decoder.version'] = torch.Tensor([1])
         return state_dict
 
@@ -354,12 +354,15 @@ def parse_arch(args):
 
     # default architecture
     args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
-    args.encoder_layers = getattr(args, 'encoder_layers', '[(512, 3)] * 20')
+    args.encoder_layers = getattr(args, 'encoder_layers',
+                                  '(([1, 2, 4, 8, 16], 512, 3, False),)*3')
     args.decoder_embed_dim = getattr(args, 'decoder_embed_dim', 512)
-    args.decoder_layers = getattr(args, 'decoder_layers', '[(512, 3)] * 20')
+    args.decoder_layers = getattr(args, 'decoder_layers',
+                                  '(([1, 2, 4, 8, 16], 512, 3, True),)*3')
     args.decoder_out_embed_dim = getattr(args, 'decoder_out_embed_dim', 256)
     args.decoder_attention = getattr(args, 'decoder_attention', 'True')
-    args.share_input_output_embed = getattr(args, 'share_input_output_embed', False)
+    args.share_input_output_embed = getattr(args, 'share_input_output_embed',
+                                            False)
     return args
 
 

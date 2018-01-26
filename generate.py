@@ -119,7 +119,7 @@ def main():
 
                 with open(output_path, "a+") as f:
                         f.write('PRED SENT %d: %s\n' % (sample_id, hypo_str))
-                        f.write('ALIGNMENT %d: %s\n' % (sample_id, alignment))
+                        f.write('ALIGNMENT %d: %s\n' % (sample_id, ' '.join(map(str, alignment))))
                         f.write('\n*************** \n\n')
                         f.close()
 

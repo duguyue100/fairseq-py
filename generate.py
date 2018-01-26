@@ -18,6 +18,8 @@ def main():
     parser = options.get_parser('Generation')
     parser.add_argument('--path', metavar='FILE', required=True, action='append',
                         help='path(s) to model file(s)')
+    parser.add_argument('--output_path',  metavar='FILE', required=True,
+                       help='path to save model predictions')
     dataset_args = options.add_dataset_args(parser)
     dataset_args.add_argument('--batch-size', default=32, type=int, metavar='N',
                               help='batch size')

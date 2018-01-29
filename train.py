@@ -208,7 +208,7 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions, traincsv_p
             if args.save_interval > 0 and (i + 1) % args.save_interval == 0:
                 save_checkpoint(trainer, args, epoch, i + 1)
 
-        t.print(collections.OrderedDict([
+        t.log(collections.OrderedDict([
             ('train loss', round(loss_meter.avg, 2)),
             ('train ppl', get_perplexity(nll_loss_meter.avg
                                          if nll_loss_meter.count > 0
@@ -224,13 +224,12 @@ def train(args, epoch, batch_offset, trainer, dataset, max_positions, traincsv_p
             for k, meter in extra_meters.items()
         ]))
 
-        #  save training losses to csv
-        #  with open (traincsv_path, 'ab') as csvfile:
-        #      csvwriter = csv.writer(csvfile, delimiter=',')
-        #      csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
-        #                          round(loss_meter.avg, 4)])
-        #      csvfile.close()
-
+        # save training losses to csv
+        traincsv_path = os.path.join(args.save_dir, 'train_losses.csv')
+        with open(traincsv_path, 'a+') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
+                                (round(loss_meter.avg, 4))])
 
 def save_checkpoint(trainer, args, epoch, batch_offset, val_loss):
     extra_state = {
@@ -304,12 +303,13 @@ def validate(args, epoch, trainer, dataset, max_positions, subset, validcsv_path
             for k, meter in extra_meters.items()
         ]))
 
-        # save validation losses to csv
-        #  with open (validcsv_path, 'ab') as csvfile:
-        #      csvwriter = csv.writer(csvfile, delimiter=',')
-        #      csvwriter.writerow([epoch, round(get_perplexity(loss_meter.avg), 3),
-        #                          round(loss_meter.avg, 4)])
-        #      csvfile.close()
+        #save validation losses to csv
+        validcsv_path = os.path.join(args.save_dir, 'valid_losses.csv')
+        with open(validcsv_path, 'a+') as csvfile:
+            csvwriter = csv.writer(csvfile, delimiter=',')
+            csvwriter.writerow([epoch,
+                                round(get_perplexity(loss_meter.avg), 3),
+                                round(loss_meter.avg, 4)])
 
     # update and return the learning rate
     return loss_meter.avg

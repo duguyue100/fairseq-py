@@ -291,21 +291,21 @@ def parse_arch(args):
         args.decoder_attention = True
         args.decoder_dropout_out = 0
     elif args.arch == 'GRU_en2wubi_model':
-        args.encoder_embed_dim = 1024
-        args.encoder_layers = 5
+        args.encoder_embed_dim = 256
+        args.encoder_layers = 1
         args.encoder_dropout_out = 0
-        args.decoder_embed_dim = 1024
-        args.decoder_layers = 5
-        args.decoder_out_embed_dim = 1024
+        args.decoder_embed_dim = 256
+        args.decoder_layers = 1
+        args.decoder_out_embed_dim = 256
         args.decoder_attention = True
         args.decoder_dropout_out = 0
     elif args.arch == 'GRU_wubi2en_model':
-        args.encoder_embed_dim = 1024
-        args.encoder_layers = 5
+        args.encoder_embed_dim = 256
+        args.encoder_layers = 1
         args.encoder_dropout_out = 0
-        args.decoder_embed_dim = 1024
-        args.decoder_layers = 5
-        args.decoder_out_embed_dim = 1024
+        args.decoder_embed_dim = 256
+        args.decoder_layers = 1
+        args.decoder_out_embed_dim = 256
         args.decoder_attention = True
         args.decoder_dropout_out = 0
     else:

@@ -139,9 +139,9 @@ def main():
     print('| Generate {} with beam={}: {}'.format(args.gen_subset, args.beam, scorer.result_string()))
 
     with open(output_path, "a+") as f:
-        f.write('| Translated {} sentences ({} tokens) in {:.1f}s ({:.2f} tokens/s)'.format(
+        f.write('| Translated {} sentences ({} tokens) in {:.1f}s ({:.2f} tokens/s)\n'.format(
         num_sentences, gen_timer.n, gen_timer.sum, 1. / gen_timer.avg))
-	f.write('| Generate {} with beam={}: {}'.format(args.gen_subset, args.beam, scorer.result_string()))
+        f.write('| Generate {} with beam={}: {}'.format(args.gen_subset, args.beam, scorer.result_string()))
 
 
 if __name__ == '__main__':

@@ -125,7 +125,6 @@ def add_generation_args(parser):
                        help='perform unknown replacement (optionally with alignment dictionary)')
     group.add_argument('--quiet', action='store_true',
                        help='Only print final scores')
-
     return group
 
 

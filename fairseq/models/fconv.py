@@ -320,7 +320,7 @@ def get_archs():
     return [
         'fconv', 'fconv_iwslt_de_en', 'fconv_wmt_en_ro', 'fconv_wmt_en_de',
         'fconv_wmt_en_fr', 'fconv_wubi2en', 'fconv_en2wubi', 'fconv_cn2en',
-        'fconv_en2cn'
+        'fconv_en2cn', 'fconv_wb2en_char'
     ]
 
 
@@ -407,6 +407,15 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
+    elif args.arch == 'fconv_wb2en_char':
+        convs = '[(128, 3)] * 9'       # first 9 layers have 512 units
+        convs += ' + [(256, 3)] * 4'  # next 4 layers have 1024 units
+        convs += ' + [(512, 1)] * 2'  # final 2 layers use 1x1 convolutions
+        args.encoder_embed_dim = 128
+        args.encoder_layers = convs
+        args.decoder_embed_dim = 128
+        args.decoder_layers = convs
+        args.decoder_out_embed_dim = 96
 
     else:
         assert args.arch == 'fconv'

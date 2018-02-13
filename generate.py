@@ -19,7 +19,10 @@ def main():
     parser.add_argument('--path', metavar='FILE', required=True, action='append',
                         help='path(s) to model file(s)')
     parser.add_argument('--output_path',  metavar='FILE', required=True,
-                       help='path to save model predictions')
+                       help='path to save model predictions with source and \
+                       target sentences')
+    parser.add_argument('--pred_path',  metavar='FILE', required=True,
+                      help='path to save model predictions only')
     dataset_args = options.add_dataset_args(parser)
     dataset_args.add_argument('--batch-size', default=32, type=int, metavar='N',
                               help='batch size')
@@ -107,8 +110,7 @@ def main():
                 print('T-{}\t{}'.format(sample_id, target_str))
 
 
-            output_path = args.output_path
-            with open(output_path, "a+") as f:
+            with open(args.output_path, "a+") as f:
                     f.write('SOURCE SENT %d: %s\n' % (sample_id, src_str))
                     f.write('TARGET SENT %d: %s\n' % (sample_id, target_str))
 
@@ -126,11 +128,15 @@ def main():
                     print('H-{}\t{}\t{}'.format(sample_id, hypo['score'], hypo_str))
                     print('A-{}\t{}'.format(sample_id, ' '.join(map(str, alignment))))
 
-                with open(output_path, "a+") as f:
+                with open(args.output_path, "a+") as f:
                         f.write('PRED SENT %d: %s\n' % (sample_id, hypo_str))
                         f.write('ALIGNMENT %d: %s\n' % (sample_id, ' '.join(map(str, alignment))))
                         f.write('\n*************** \n\n')
-                        f.close()
+
+
+                with open(args.pred_path, "a+") as f:
+                        f.write(hypo_str)
+                        f.write('\n')
 
                 # Score only the top hypothesis
                 if i == 0:

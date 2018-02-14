@@ -149,6 +149,9 @@ def main():
                     scorer.add(target_tokens, hypo_tokens)
                 else:
                     # the conclusion here is it has to have alignment
+                    # how to compute hypo str here?
+                    # because of no attention, cannot even generate hypo token properly? that shouldn't be the case.
+                    print (hypo['tokens'])
                     hypo_str = dataset.dst_dict.string(hypo['tokens'].int().cpu(), args.remove_bpe)
                     #  hypo_tokens = tokenizer.tokenize_line(hypo_str)
                     hypo_tokens = tokenizer.Tokenizer.tokenize(hypo_str, dataset.dst_dict, add_if_not_exist=True)

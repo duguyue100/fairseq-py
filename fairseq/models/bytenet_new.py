@@ -212,7 +212,6 @@ class BNDecoder(FairseqIncrementalDecoder):
 
         # B x T x C -> B x C x T
         x = self._transpose_unless_incremental_eval(x)
-        print (x.size())
 
         # temporal convolutions
         avg_attn_scores = None

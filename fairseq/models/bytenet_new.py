@@ -193,7 +193,8 @@ class BNDecoder(FairseqIncrementalDecoder):
 
     def forward(self, input_tokens, encoder_out):
         # split and transpose encoder outputs
-        encoder_a, encoder_b = self._split_encoder_out(encoder_out)
+        #  encoder_a, encoder_b = self._split_encoder_out(encoder_out)
+        encoder_a, encoder_b = encoder_out
 
         # embed positions
         positions = self.embed_positions(input_tokens)
@@ -206,6 +207,13 @@ class BNDecoder(FairseqIncrementalDecoder):
         x = self.embed_tokens(input_tokens) + positions
         x = F.dropout(x, p=self.dropout, training=self.training)
         target_embedding = x
+
+        #  x = torch.cat((encoder_a[:, 0:x.size()[1], :], x), dim=2)
+        if encoder_a.size()[1] >= x.size()[1]:
+            x = encoder_a[:, 0:x.size()[1], :] + x
+        else:
+            x[:, 0:encoder_a.size()[1], :] = \
+                x[:, 0:encoder_a.size()[1], :]+encoder_a
 
         # project to size of convolution
         x = self.fc1(x)

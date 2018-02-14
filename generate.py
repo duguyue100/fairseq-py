@@ -109,34 +109,34 @@ def main():
                 print('S-{}\t{}'.format(sample_id, src_str))
                 print('T-{}\t{}'.format(sample_id, target_str))
 
-
             with open(args.output_path, "a+") as f:
                     f.write('SOURCE SENT %d: %s\n' % (sample_id, src_str))
                     f.write('TARGET SENT %d: %s\n' % (sample_id, target_str))
 
             # Process top predictions
             for i, hypo in enumerate(hypos[:min(len(hypos), args.nbest)]):
-                hypo_tokens, hypo_str, alignment = utils.post_process_prediction(
-                    hypo_tokens=hypo['tokens'].int().cpu(),
-                    src_str=src_str,
-                    alignment=hypo['alignment'].int().cpu(),
-                    align_dict=align_dict,
-                    dst_dict=dataset.dst_dict,
-                    remove_bpe=args.remove_bpe)
+                if hypo["alignment"] is not None:
+                    hypo_tokens, hypo_str, alignment = utils.post_process_prediction(
+                        hypo_tokens=hypo['tokens'].int().cpu(),
+                        src_str=src_str,
+                        alignment=hypo['alignment'].int().cpu(),
+                        align_dict=align_dict,
+                        dst_dict=dataset.dst_dict,
+                        remove_bpe=args.remove_bpe)
 
-                if not args.quiet:
-                    print('H-{}\t{}\t{}'.format(sample_id, hypo['score'], hypo_str))
-                    print('A-{}\t{}'.format(sample_id, ' '.join(map(str, alignment))))
+                    if not args.quiet:
+                        print('H-{}\t{}\t{}'.format(sample_id, hypo['score'], hypo_str))
+                        print('A-{}\t{}'.format(sample_id, ' '.join(map(str, alignment))))
 
-                with open(args.output_path, "a+") as f:
-                        f.write('PRED SENT %d: %s\n' % (sample_id, hypo_str))
-                        f.write('ALIGNMENT %d: %s\n' % (sample_id, ' '.join(map(str, alignment))))
-                        f.write('\n*************** \n\n')
+                    with open(args.output_path, "a+") as f:
+                            f.write('PRED SENT %d: %s\n' % (sample_id, hypo_str))
+                            f.write('ALIGNMENT %d: %s\n' % (sample_id, ' '.join(map(str, alignment))))
+                            f.write('\n*************** \n\n')
 
 
-                with open(args.pred_path, "a+") as f:
-                        f.write(hypo_str)
-                        f.write('\n')
+                    with open(args.pred_path, "a+") as f:
+                            f.write(hypo_str)
+                            f.write('\n')
 
                 # Score only the top hypothesis
                 if i == 0:
@@ -144,8 +144,16 @@ def main():
                         # Convert back to tokens for evaluation with unk replacement and/or without BPE
                         target_tokens = tokenizer.Tokenizer.tokenize(target_str,
                                                                      dataset.dst_dict,
-                                                                     add_if_not_exist=True)
+                                                                         add_if_not_exist=True)
+                if hypo["alignment"] is not None:
                     scorer.add(target_tokens, hypo_tokens)
+                else:
+                    # the conclusion here is it has to have alignment
+                    hypo_str = dataset.dst_dict.string(hypo['tokens'].int().cpu(), args.remove_bpe)
+                    #  hypo_tokens = tokenizer.tokenize_line(hypo_str)
+                    hypo_tokens = tokenizer.Tokenizer.tokenize(hypo_str, dataset.dst_dict, add_if_not_exist=True)
+                    scorer.add(target_tokens, hypo_tokens)
+                    print (hypo['score'])
 
             wps_meter.update(src_tokens.size(0))
             t.log({'wps': round(wps_meter.avg)})

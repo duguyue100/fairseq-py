@@ -183,8 +183,12 @@ class SequenceGenerator(object):
                 def get_hypo():
                     hypo = tokens[idx, 1:step+2].clone()  # skip the first index, which is EOS
                     hypo[step] = self.eos
-                    attention = attn[idx, :, 1:step+2].clone()
-                    _, alignment = attention.max(dim=0)
+                    if attn is not None:
+                        attention = attn[idx, :, 1:step+2].clone()
+                        _, alignment = attention.max(dim=0)
+                    else:
+                        attention = None
+                        alignment = None
                     return {
                         'tokens': hypo,
                         'score': score,
@@ -235,7 +239,10 @@ class SequenceGenerator(object):
             probs[:, self.unk] -= self.unk_penalty  # apply unk penalty
 
             # Record attention scores
-            attn[:, :, step+1].copy_(avg_attn_scores)
+            if avg_attn_scores is not None:
+                attn[:, :, step+1].copy_(avg_attn_scores)
+            else:
+                attn = None
 
             # take the best 2 x beam_size predictions. We'll choose the first
             # beam_size of these which don't predict eos to continue with.
@@ -301,8 +308,9 @@ class SequenceGenerator(object):
                                 out=tokens_buf.view(bsz, beam_size, -1)[:, :, step+1])
 
             # copy attention for active hypotheses
-            torch.index_select(attn[:, :, :step+2], dim=0, index=active_bbsz_idx,
-                               out=attn_buf[:, :, :step+2])
+            if attn is not None:
+                torch.index_select(attn[:, :, :step+2], dim=0, index=active_bbsz_idx,
+                                   out=attn_buf[:, :, :step+2])
 
             # swap buffers
             old_tokens = tokens

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import math
 
 
 class DilatedConv1d(nn.Conv1d):
@@ -144,7 +145,7 @@ class ResBlock(nn.Module):
         out = self.layernorm3(out)
         out = self.conv_out(self.relu(out))
         if self.mode == "encoder":
-            out += inputs
+            out = (out+inputs) * math.sqrt(0.5)
         return out
 
 

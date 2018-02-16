@@ -8,23 +8,24 @@
 
 import math
 import torch
-from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 
 from fairseq.data import LanguagePairDataset
-from fairseq.modules import BeamableMM, GradMultiply, LearnedPositionalEmbedding, LinearizedConvolution
+from fairseq.modules import \
+    BeamableMM, GradMultiply, LearnedPositionalEmbedding, LinearizedConvolution
+from fairseq.modules import ResBlock
 
 from . import FairseqEncoder, FairseqIncrementalDecoder, FairseqModel
 
 
-class FConvModel(FairseqModel):
+class FConvDilModel(FairseqModel):
     def __init__(self, encoder, decoder):
         super().__init__(encoder, decoder)
-        self.encoder.num_attention_layers = sum(layer is not None for layer in decoder.attention)
+        self.encoder.num_attention_layers = len(decoder.attention)
 
 
-class FConvEncoder(FairseqEncoder):
+class FConvDilEncoder(FairseqEncoder):
     """Convolutional encoder"""
     def __init__(self, dictionary, embed_dim=512, max_positions=1024,
                  convolutions=((512, 3),) * 20, dropout=0.1):
@@ -35,21 +36,24 @@ class FConvEncoder(FairseqEncoder):
         num_embeddings = len(dictionary)
         padding_idx = dictionary.pad()
         self.embed_tokens = Embedding(num_embeddings, embed_dim, padding_idx)
-        self.embed_positions = PositionalEmbedding(max_positions, embed_dim, padding_idx,
-                                                   left_pad=LanguagePairDataset.LEFT_PAD_SOURCE)
+        self.embed_positions = PositionalEmbedding(
+            max_positions, embed_dim, padding_idx,
+            left_pad=LanguagePairDataset.LEFT_PAD_SOURCE)
 
-        in_channels = convolutions[0][0]
+        in_channels = convolutions[0][1]
         self.fc1 = Linear(embed_dim, in_channels, dropout=dropout)
-        self.projections = nn.ModuleList()
-        self.convolutions = nn.ModuleList()
-        for (out_channels, kernel_size) in convolutions:
-            pad = (kernel_size - 1) / 2
-            self.projections.append(Linear(in_channels, out_channels)
-                                    if in_channels != out_channels else None)
-            self.convolutions.append(
-                ConvTBC(in_channels, out_channels * 2, kernel_size, padding=pad,
-                        dropout=dropout))
-            in_channels = out_channels
+
+        self.resblocks = nn.ModuleList()
+        for en_set in convolutions:
+            # for each set
+            (dil_rates, num_channels, kernel_size, causal) = en_set
+            for dil_rate in dil_rates:
+                self.resblocks.append(
+                    ResBlock(in_channels=num_channels,
+                             kernel_size=kernel_size,
+                             dilation=dil_rate,
+                             causal=causal))
+
         self.fc2 = Linear(in_channels, embed_dim)
 
     def forward(self, src_tokens):
@@ -61,19 +65,15 @@ class FConvEncoder(FairseqEncoder):
         # project to size of convolution
         x = self.fc1(x)
 
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        # B x T x C -> B x C x T
+        x = x.transpose(1, 2)
 
         # temporal convolutions
-        for proj, conv in zip(self.projections, self.convolutions):
-            residual = x if proj is None else proj(x)
-            x = F.dropout(x, p=self.dropout, training=self.training)
-            x = conv(x)
-            x = F.glu(x, dim=2)
-            x = (x + residual) * math.sqrt(0.5)
+        for resblock in self.resblocks:
+            x = resblock(x)
 
-        # T x B x C -> B x T x C
-        x = x.transpose(1, 0)
+        # B x C x T -> B x T x C
+        x = x.transpose(1, 2)
 
         # project back to size of embedding
         x = self.fc2(x)
@@ -131,7 +131,7 @@ class AttentionLayer(nn.Module):
             self.add_module('bmm', BeamableMM(beamable_mm_beam_size))
 
 
-class FConvDecoder(FairseqIncrementalDecoder):
+class FConvDilDecoder(FairseqIncrementalDecoder):
     """Convolutional decoder"""
     def __init__(self, dictionary, embed_dim=512, out_embed_dim=256,
                  max_positions=1024, convolutions=((512, 3),) * 20,
@@ -140,39 +140,47 @@ class FConvDecoder(FairseqIncrementalDecoder):
         self.register_buffer('version', torch.Tensor([2]))
         self.dropout = dropout
 
-        in_channels = convolutions[0][0]
+        in_channels = convolutions[0][1]
         if isinstance(attention, bool):
             # expand True into [True, True, ...] and do the same with False
-            attention = [attention] * len(convolutions)
-        if not isinstance(attention, list) or len(attention) != len(convolutions):
-            raise ValueError('Attention is expected to be a list of booleans of '
-                             'length equal to the number of layers.')
+            attention = [True] * len(convolutions[0][0])
+        if not isinstance(attention, list) or \
+                len(attention) != len(convolutions[0][0]):
+            raise ValueError(
+                'Attention is expected to be a list of booleans of '
+                'length equal to the number of layers.')
 
         num_embeddings = len(dictionary)
         padding_idx = dictionary.pad()
         self.embed_tokens = Embedding(num_embeddings, embed_dim, padding_idx)
-        self.embed_positions = PositionalEmbedding(max_positions, embed_dim, padding_idx,
-                                                   left_pad=LanguagePairDataset.LEFT_PAD_TARGET)
+        self.embed_positions = PositionalEmbedding(
+            max_positions, embed_dim, padding_idx,
+            left_pad=LanguagePairDataset.LEFT_PAD_TARGET)
 
         self.fc1 = Linear(embed_dim, in_channels, dropout=dropout)
-        self.projections = nn.ModuleList()
-        self.convolutions = nn.ModuleList()
+
+        self.resblocks = nn.ModuleList()
         self.attention = nn.ModuleList()
-        for i, (out_channels, kernel_size) in enumerate(convolutions):
-            pad = kernel_size - 1
-            self.projections.append(Linear(in_channels, out_channels)
-                                    if in_channels != out_channels else None)
-            self.convolutions.append(
-                LinearizedConv1d(in_channels, out_channels * 2, kernel_size,
-                                 padding=pad, dropout=dropout))
-            self.attention.append(AttentionLayer(out_channels, embed_dim)
-                                  if attention[i] else None)
-            in_channels = out_channels
+        for en_set in convolutions:
+            # for each set
+            (dil_rates, num_channels, kernel_size, causal) = en_set
+            # define residual layer
+            for i, dil_rate in enumerate(dil_rates):
+                self.resblocks.append(
+                    ResBlock(in_channels=num_channels,
+                             kernel_size=kernel_size,
+                             dilation=dil_rate,
+                             causal=causal,
+                             mode="decoder"))
+                self.attention.append(AttentionLayer(num_channels, embed_dim)
+                                      if attention[i] else None)
+
         self.fc2 = Linear(in_channels, out_embed_dim)
         if share_embed:
             assert out_embed_dim == embed_dim, \
                 "Shared embed weights implies same dimensions " \
-                " out_embed_dim={} vs embed_dim={}".format(out_embed_dim, embed_dim)
+                " out_embed_dim={} vs embed_dim={}".format(
+                    out_embed_dim, embed_dim)
             self.fc3 = nn.Linear(out_embed_dim, num_embeddings)
             self.fc3.weight = self.embed_tokens.weight
         else:
@@ -194,44 +202,46 @@ class FConvDecoder(FairseqIncrementalDecoder):
         x = F.dropout(x, p=self.dropout, training=self.training)
         target_embedding = x
 
+        #  print (x.size())
         # project to size of convolution
         x = self.fc1(x)
+        #  print (x.size())
 
-        # B x T x C -> T x B x C
-        x = self._transpose_unless_incremental_eval(x)
+        # B x T x C -> B x C x T
+        x = x.transpose(1, 2)
+        #  x = self._transpose_unless_incremental_eval(x)
 
         # temporal convolutions
         avg_attn_scores = None
         num_attn_layers = len(self.attention)
-        for proj, conv, attention in zip(self.projections, self.convolutions, self.attention):
-            residual = x if proj is None else proj(x)
 
-            x = F.dropout(x, p=self.dropout, training=self.training)
-            x = conv(x)
-            x = conv.remove_future_timesteps(x)
-            x = F.glu(x, dim=2)
+        for resblock, attention in zip(self.resblocks, self.attention):
+            residual = x
+            # B x C x T
+            x = resblock(x)
 
-            # attention
             if attention is not None:
-                x = self._transpose_unless_incremental_eval(x)
-                print (x.size())
-                print (encoder_a.size())
-                print (encoder_b.size())
+                # B x T x C
+                x = x.transpose(1, 2)
+                #  x = self._transpose_unless_incremental_eval(x)
 
-                x, attn_scores = attention(x, target_embedding, (encoder_a, encoder_b))
+                x, attn_scores = attention(
+                    x, target_embedding, (encoder_a, encoder_b))
                 attn_scores = attn_scores / num_attn_layers
                 if avg_attn_scores is None:
                     avg_attn_scores = attn_scores
                 else:
                     avg_attn_scores.add_(attn_scores)
 
-                x = self._transpose_unless_incremental_eval(x)
+                # B x C x T
+                x = x.transpose(1, 2)
+                #  x = self._transpose_unless_incremental_eval(x)
 
-            # residual
-            x = (x + residual) * math.sqrt(0.5)
+            x = (x+residual) * math.sqrt(0.5)
 
-        # T x B x C -> B x T x C
-        x = self._transpose_unless_incremental_eval(x)
+        # B x C x T -> B x T x C
+        #  x = self._transpose_unless_incremental_eval(x)
+        x = x.transpose(1, 2)
 
         # project back to size of vocabulary
         x = self.fc2(x)
@@ -277,7 +287,7 @@ class FConvDecoder(FairseqIncrementalDecoder):
     def _transpose_unless_incremental_eval(self, x):
         if self._is_incremental_eval:
             return x
-        return x.transpose(0, 1)
+        return x.transpose(1, 2)
 
 
 def Embedding(num_embeddings, embedding_dim, padding_idx):
@@ -287,7 +297,8 @@ def Embedding(num_embeddings, embedding_dim, padding_idx):
 
 
 def PositionalEmbedding(num_embeddings, embedding_dim, padding_idx, left_pad):
-    m = LearnedPositionalEmbedding(num_embeddings, embedding_dim, padding_idx, left_pad)
+    m = LearnedPositionalEmbedding(
+        num_embeddings, embedding_dim, padding_idx, left_pad)
     m.weight.data.normal_(0, 0.1)
     return m
 
@@ -300,7 +311,8 @@ def Linear(in_features, out_features, dropout=0):
     return nn.utils.weight_norm(m)
 
 
-def LinearizedConv1d(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
+def LinearizedConv1d(in_channels, out_channels,
+                     kernel_size, dropout=0, **kwargs):
     """Weight-normalized Conv1d layer optimized for decoding"""
     m = LinearizedConvolution(in_channels, out_channels, kernel_size, **kwargs)
     std = math.sqrt((4 * (1.0 - dropout)) / (m.kernel_size[0] * in_channels))
@@ -321,40 +333,45 @@ def ConvTBC(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
 
 def get_archs():
     return [
-        'fconv', 'fconv_iwslt_de_en', 'fconv_wmt_en_ro', 'fconv_wmt_en_de',
-        'fconv_wmt_en_fr', 'fconv_wubi2en', 'fconv_en2wubi', 'fconv_cn2en',
-        'fconv_en2cn', 'fconv_wb2en_char'
+        'fconvdil', 'fconvdil_iwslt_de_en', 'fconvdil_wmt_en_ro',
+        'fconvdil_wmt_en_de', 'fconvdil_wmt_en_fr', 'fconvdil_wubi2en',
+        'fconvdil_en2wubi', 'fconvdil_cn2en',
+        'fconvdil_en2cn', 'fconvdil_wb2en_char'
     ]
 
 
 def _check_arch(args):
     """Check that the specified architecture is valid and not ambiguous."""
     if args.arch not in get_archs():
-        raise ValueError('Unknown fconv model architecture: {}'.format(args.arch))
-    if args.arch != 'fconv':
+        raise ValueError('Unknown fconvdil model architecture: {}'.format(
+            args.arch))
+    if args.arch != 'fconvdil':
         # check that architecture is not ambiguous
-        for a in ['encoder_embed_dim', 'encoder_layers', 'decoder_embed_dim', 'decoder_layers',
+        for a in ['encoder_embed_dim', 'encoder_layers',
+                  'decoder_embed_dim', 'decoder_layers',
                   'decoder_out_embed_dim']:
             if hasattr(args, a):
-                raise ValueError('--{} cannot be combined with --arch={}'.format(a, args.arch))
+                raise ValueError(
+                    '--{} cannot be combined with --arch={}'.format(
+                        a, args.arch))
 
 
 def parse_arch(args):
     _check_arch(args)
 
-    if args.arch == 'fconv_iwslt_de_en':
+    if args.arch == 'fconvdil_iwslt_de_en':
         args.encoder_embed_dim = 256
-        args.encoder_layers = '[(256, 3)] * 4'
+        args.encoder_layers = '(([1, 2, 4, 8, 16], 256, 3, False),)*1'
         args.decoder_embed_dim = 256
-        args.decoder_layers = '[(256, 3)] * 3'
+        args.decoder_layers = '(([1, 2, 4, 8, 16], 512, 3, True),)*1'
         args.decoder_out_embed_dim = 256
-    elif args.arch == 'fconv_wmt_en_ro':
+    elif args.arch == 'fconvdil_wmt_en_ro':
         args.encoder_embed_dim = 512
         args.encoder_layers = '[(512, 3)] * 20'
         args.decoder_embed_dim = 512
         args.decoder_layers = '[(512, 3)] * 20'
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_wmt_en_de':
+    elif args.arch == 'fconvdil_wmt_en_de':
         convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
         convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
         convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
@@ -363,7 +380,7 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_wmt_en_fr':
+    elif args.arch == 'fconvdil_wmt_en_fr':
         convs = '[(512, 3)] * 6'       # first 6 layers have 512 units
         convs += ' + [(768, 3)] * 4'   # next 4 layers have 768 units
         convs += ' + [(1024, 3)] * 3'  # next 3 layers have 1024 units
@@ -374,7 +391,7 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_en2wubi':
+    elif args.arch == 'fconvdil_en2wubi':
         convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
         convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
         convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
@@ -383,7 +400,7 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_wubi2en':
+    elif args.arch == 'fconvdil_wubi2en':
         convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
         convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
         convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
@@ -392,7 +409,7 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_en2cn':
+    elif args.arch == 'fconvdil_en2cn':
         convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
         convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
         convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
@@ -401,7 +418,7 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_cn2en':
+    elif args.arch == 'fconvdil_cn2en':
         convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
         convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
         convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
@@ -410,7 +427,7 @@ def parse_arch(args):
         args.decoder_embed_dim = 768
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
-    elif args.arch == 'fconv_wb2en_char':
+    elif args.arch == 'fconvdil_wb2en_char':
         convs = '[(128, 3)] * 9'       # first 9 layers have 512 units
         convs += ' + [(256, 3)] * 4'  # next 4 layers have 1024 units
         convs += ' + [(512, 1)] * 2'  # final 2 layers use 1x1 convolutions
@@ -419,9 +436,8 @@ def parse_arch(args):
         args.decoder_embed_dim = 128
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 96
-
     else:
-        assert args.arch == 'fconv'
+        assert args.arch == 'fconvdil'
 
     # default architecture
     args.encoder_embed_dim = getattr(args, 'encoder_embed_dim', 512)
@@ -430,19 +446,20 @@ def parse_arch(args):
     args.decoder_layers = getattr(args, 'decoder_layers', '[(512, 3)] * 20')
     args.decoder_out_embed_dim = getattr(args, 'decoder_out_embed_dim', 256)
     args.decoder_attention = getattr(args, 'decoder_attention', 'True')
-    args.share_input_output_embed = getattr(args, 'share_input_output_embed', False)
+    args.share_input_output_embed = getattr(
+        args, 'share_input_output_embed', False)
     return args
 
 
 def build_model(args, src_dict, dst_dict):
-    encoder = FConvEncoder(
+    encoder = FConvDilEncoder(
         src_dict,
         embed_dim=args.encoder_embed_dim,
         convolutions=eval(args.encoder_layers),
         dropout=args.dropout,
         max_positions=args.max_source_positions,
     )
-    decoder = FConvDecoder(
+    decoder = FConvDilDecoder(
         dst_dict,
         embed_dim=args.decoder_embed_dim,
         convolutions=eval(args.decoder_layers),
@@ -452,4 +469,4 @@ def build_model(args, src_dict, dst_dict):
         max_positions=args.max_target_positions,
         share_embed=args.share_input_output_embed
     )
-    return FConvModel(encoder, decoder)
+    return FConvDilModel(encoder, decoder)

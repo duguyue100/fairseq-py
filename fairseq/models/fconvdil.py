@@ -367,7 +367,7 @@ def parse_arch(args):
 
     if args.arch == 'fconvdil_iwslt_de_en':
         args.encoder_embed_dim = 256
-        args.encoder_layers = '(([1, 1, 1], 256, 3, False),)*1'
+        args.encoder_layers = '(([1, 2, 4], 256, 3, False),)*1'
         args.decoder_embed_dim = 256
         args.decoder_layers = '(([1, 1, 1], 256, 3, True),)*1'
         args.decoder_out_embed_dim = 256

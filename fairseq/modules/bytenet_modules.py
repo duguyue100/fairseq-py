@@ -31,6 +31,10 @@ class DilatedConv1d(nn.Conv1d):
             dilation=dilation,
             groups=groups, bias=bias)
 
+        std = math.sqrt((4 * 0.8) / (self.kernel_size[0] * in_channels))
+        self.weight.data.normal_(mean=0, std=std)
+        self.bias.data.zero_()
+
     def forward(self, inputs):
         output = super(DilatedConv1d, self).forward(inputs)
         if self.causal:
@@ -121,6 +125,7 @@ class ResBlock(nn.Module):
         self.conv_in = nn.Conv1d(in_channels=in_channels,
                                  out_channels=d_channels,
                                  kernel_size=1)
+        self.conv_in = nn.utils.weight_norm(self.conv_in, dim=1)
 
         # dilation convolution in the middle
         self.conv_mid = DilatedConv1d(in_channels=d_channels,
@@ -128,11 +133,13 @@ class ResBlock(nn.Module):
                                       kernel_size=kernel_size,
                                       dilation=dilation,
                                       causal=causal)
+        self.conv_mid = nn.utils.weight_norm(self.conv_mid, dim=1)
 
         # output 1x1 convolution
         self.conv_out = nn.Conv1d(in_channels=d_channels,
                                   out_channels=out_channels,
                                   kernel_size=1)
+        self.conv_out = nn.utils.weight_norm(self.conv_out, dim=1)
 
         # activation
         self.relu = nn.ReLU()

@@ -52,7 +52,8 @@ class FConvDilEncoder(FairseqEncoder):
                     ResBlock(in_channels=num_channels,
                              kernel_size=kernel_size,
                              dilation=dil_rate,
-                             causal=causal))
+                             causal=causal,
+                             mode="not_encoder"))
 
         self.fc2 = Linear(in_channels, embed_dim)
 
@@ -70,7 +71,11 @@ class FConvDilEncoder(FairseqEncoder):
 
         # temporal convolutions
         for resblock in self.resblocks:
+            residual = x
+            x = F.dropout(x, p=self.dropout, training=self.training)
             x = resblock(x)
+
+            x = (x+residual)*math.sqrt(0.5)
 
         # B x C x T -> B x T x C
         x = x.transpose(1, 2)
@@ -218,6 +223,7 @@ class FConvDilDecoder(FairseqIncrementalDecoder):
         for resblock, attention in zip(self.resblocks, self.attention):
             residual = x
             # B x C x T
+            x = F.dropout(x, p=self.dropout, training=self.training)
             x = resblock(x)
 
             if attention is not None:
@@ -361,9 +367,9 @@ def parse_arch(args):
 
     if args.arch == 'fconvdil_iwslt_de_en':
         args.encoder_embed_dim = 256
-        args.encoder_layers = '(([1, 2, 4, 8, 16], 256, 3, False),)*1'
+        args.encoder_layers = '(([1, 1, 1], 256, 3, False),)*1'
         args.decoder_embed_dim = 256
-        args.decoder_layers = '(([1, 2, 4, 8, 16], 512, 3, True),)*1'
+        args.decoder_layers = '(([1, 1, 1], 256, 3, True),)*1'
         args.decoder_out_embed_dim = 256
     elif args.arch == 'fconvdil_wmt_en_ro':
         args.encoder_embed_dim = 512

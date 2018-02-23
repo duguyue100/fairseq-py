@@ -253,7 +253,7 @@ def get_archs():
     return [
         'GRU', 'GRU_wiseman_iwslt_de_en', 'GRU_luong_wmt_en_de',
         "GRU_en2wubi_model", "GRU_wubi2en_model", "GRU_en2cn_model",
-        "GRU_cn2en_model", "GRU_wubi2en_char"
+        "GRU_cn2en_model", "GRU_wubi2en_char", "GRU_en2wubi_char"
     ]
 
 
@@ -328,6 +328,15 @@ def parse_arch(args):
         args.decoder_attention = True
         args.decoder_dropout_out = 0
     elif args.arch == 'GRU_wubi2en_char':
+        args.encoder_embed_dim = 128
+        args.encoder_layers = 1
+        args.encoder_dropout_out = 0
+        args.decoder_embed_dim = 128
+        args.decoder_layers = 1
+        args.decoder_out_embed_dim = 128
+        args.decoder_attention = True
+        args.decoder_dropout_out = 0
+    elif args.arch == 'GRU_en2wubi_char':
         args.encoder_embed_dim = 128
         args.encoder_layers = 1
         args.encoder_dropout_out = 0

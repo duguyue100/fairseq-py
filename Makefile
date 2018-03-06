@@ -18,7 +18,7 @@ preproc-en2cn:
 
 ## fconv experiments
 run-1-en2cn-fconv:
-	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch fconv_en2cn --save-dir checkpoints/fconv-en2cn-run-1 --max-epoch 20
+	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 2000 --arch fconv_en2cn --save-dir checkpoints/fconv-en2cn-run-1 --max-epoch 20
 
 run-2-en2cn-fconv:
 	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch fconv_en2cn --save-dir checkpoints/fconv-en2cn-run-2 --max-epoch 20

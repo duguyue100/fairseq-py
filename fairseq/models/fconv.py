@@ -381,30 +381,30 @@ def parse_arch(args):
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
     elif args.arch == 'fconv_wubi2en':
-        convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
-        convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
-        convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
-        args.encoder_embed_dim = 768
+        convs = '[(512, 3)] * 10'       # first 9 layers have 512 units
+        #  convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
+        #  convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
+        args.encoder_embed_dim = 512
         args.encoder_layers = convs
-        args.decoder_embed_dim = 768
+        args.decoder_embed_dim = 512
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
     elif args.arch == 'fconv_en2cn':
-        convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
-        convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
-        convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
-        args.encoder_embed_dim = 768
+        convs = '[(512, 3)] * 10'       # first 9 layers have 512 units
+        #  convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
+        #  convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
+        args.encoder_embed_dim = 512
         args.encoder_layers = convs
-        args.decoder_embed_dim = 768
+        args.decoder_embed_dim = 512
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
     elif args.arch == 'fconv_cn2en':
-        convs = '[(512, 3)] * 9'       # first 9 layers have 512 units
-        convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
-        convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
-        args.encoder_embed_dim = 768
+        convs = '[(512, 3)] * 10'       # first 9 layers have 512 units
+        #  convs += ' + [(1024, 3)] * 4'  # next 4 layers have 1024 units
+        #  convs += ' + [(2048, 1)] * 2'  # final 2 layers use 1x1 convolutions
+        args.encoder_embed_dim = 512
         args.encoder_layers = convs
-        args.decoder_embed_dim = 768
+        args.decoder_embed_dim = 512
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 512
     elif args.arch == 'fconv_wb2en_char':
@@ -425,8 +425,6 @@ def parse_arch(args):
         args.decoder_embed_dim = 128
         args.decoder_layers = convs
         args.decoder_out_embed_dim = 96
-
-
     else:
         assert args.arch == 'fconv'
 

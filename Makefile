@@ -52,6 +52,38 @@ run-5-en2cn-gru:
 preproc-cn2en:
 	python preprocess.py --source-lang cn --target-lang en --trainpref data/data_3mil/3mil.tok.train --validpref data/data_3mil/3mil.tok.valid --testpref data/data_3mil/3mil.tok.test --destdir data-bin/cn2en
 
+## fconv experiments
+run-1-cn2en-fconv:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch fconv_cn2en --save-dir checkpoints/fconv-cn2en-run-1 --max-epoch 20
+
+run-2-cn2en-fconv:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch fconv_cn2en --save-dir checkpoints/fconv-cn2en-run-2 --max-epoch 20
+
+run-3-cn2en-fconv:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch fconv_cn2en --save-dir checkpoints/fconv-cn2en-run-3 --max-epoch 20
+
+run-4-cn2en-fconv:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch fconv_cn2en --save-dir checkpoints/fconv-cn2en-run-4 --max-epoch 20
+
+run-5-cn2en-fconv:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch fconv_cn2en --save-dir checkpoints/fconv-cn2en-run-5 --max-epoch 20
+
+## GRU experiments
+run-1-cn2en-gru:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_cn2en_model --save-dir checkpoints/gru-cn2en-run-1 --max-epoch 20
+
+run-2-cn2en-gru:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_cn2en_model --save-dir checkpoints/gru-cn2en-run-2 --max-epoch 20
+
+run-3-cn2en-gru:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_cn2en_model --save-dir checkpoints/gru-cn2en-run-3 --max-epoch 20
+
+run-4-cn2en-gru:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_cn2en_model --save-dir checkpoints/gru-cn2en-run-4 --max-epoch 20
+
+run-5-cn2en-gru:
+	python train.py data-bin/cn2en --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_cn2en_model --save-dir checkpoints/gru-cn2en-run-5 --max-epoch 20
+
 preproc-en2wb:
 	python preprocess.py --source-lang en --target-lang wb --trainpref data/data_3mil/3mil.tok.train --validpref data/data_3mil/3mil.tok.valid --testpref data/data_3mil/3mil.tok.test --destdir data-bin/en2wb
 

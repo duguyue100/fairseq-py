@@ -292,37 +292,37 @@ def parse_arch(args):
         args.decoder_attention = True
         args.decoder_dropout_out = 0
     elif args.arch == 'GRU_en2wubi_model':
-        args.encoder_embed_dim = 768
+        args.encoder_embed_dim = 512
         args.encoder_layers = 4
         args.encoder_dropout_out = 0
-        args.decoder_embed_dim = 768
+        args.decoder_embed_dim = 512
         args.decoder_layers = 4
         args.decoder_out_embed_dim = 512
         args.decoder_attention = True
         args.decoder_dropout_out = 0
     elif args.arch == 'GRU_wubi2en_model':
-        args.encoder_embed_dim = 768
+        args.encoder_embed_dim = 512
         args.encoder_layers = 4
         args.encoder_dropout_out = 0
-        args.decoder_embed_dim = 768
+        args.decoder_embed_dim = 512
         args.decoder_layers = 4
         args.decoder_out_embed_dim = 512
         args.decoder_attention = True
         args.decoder_dropout_out = 0
     elif args.arch == 'GRU_en2cn_model':
-        args.encoder_embed_dim = 768
+        args.encoder_embed_dim = 512
         args.encoder_layers = 4
         args.encoder_dropout_out = 0
-        args.decoder_embed_dim = 768
+        args.decoder_embed_dim = 512
         args.decoder_layers = 4
         args.decoder_out_embed_dim = 512
         args.decoder_attention = True
         args.decoder_dropout_out = 0
     elif args.arch == 'GRU_cn2en_model':
-        args.encoder_embed_dim = 768
+        args.encoder_embed_dim = 512
         args.encoder_layers = 4
         args.encoder_dropout_out = 0
-        args.decoder_embed_dim = 768
+        args.decoder_embed_dim = 512
         args.decoder_layers = 4
         args.decoder_out_embed_dim = 512
         args.decoder_attention = True

@@ -34,19 +34,19 @@ run-5-en2cn-fconv:
 
 ## GRU experiments
 run-1-en2cn-gru:
-	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch gru_en2cn_model --save-dir checkpoints/gru-en2cn-run-1 --max-epoch 20
+	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_en2cn_model --save-dir checkpoints/gru-en2cn-run-1 --max-epoch 20
 
 run-2-en2cn-gru:
-	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch gru_en2cn_model --save-dir checkpoints/gru-en2cn-run-2 --max-epoch 20
+	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_en2cn_model --save-dir checkpoints/gru-en2cn-run-2 --max-epoch 20
 
 run-3-en2cn-gru:
-	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch gru_en2cn_model --save-dir checkpoints/gru-en2cn-run-3 --max-epoch 20
+	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_en2cn_model --save-dir checkpoints/gru-en2cn-run-3 --max-epoch 20
 
 run-4-en2cn-gru:
-	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch gru_en2cn_model --save-dir checkpoints/gru-en2cn-run-4 --max-epoch 20
+	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_en2cn_model --save-dir checkpoints/gru-en2cn-run-4 --max-epoch 20
 
 run-5-en2cn-gru:
-	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch gru_en2cn_model --save-dir checkpoints/gru-en2cn-run-5 --max-epoch 20
+	python train.py data-bin/en2cn --lr 0.25 --clip-norm 0.1 --dropout 0.2 --max-tokens 1000 --arch GRU_en2cn_model --save-dir checkpoints/gru-en2cn-run-5 --max-epoch 20
 
 # EXPERIMENTS ON CN2EN
 preproc-cn2en:
